@@ -1,0 +1,22 @@
+{
+  "name": "orbital-sentinel",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "description": "ORBITAL SENTINEL — mission console for a 6U hyperspectral CubeSat monitoring UAE coastal waters. Static site for GitHub Pages, plus the Node + Python backend it was ported from.",
+  "scripts": {
+    "serve": "node tools/serve.mjs 4173 site",
+    "sync": "node tools/sync-map3d.mjs",
+    "reference": "python3 tools/dump_reference.py",
+    "parity": "node tools/parity-check.mjs",
+    "site-check": "node tools/site-check.mjs",
+    "check": "node tools/sync-map3d.mjs --check && npm run reference && npm run parity && npm run site-check",
+    "backend": "./scripts/start.sh"
+  },
+  "devDependencies": {
+    "playwright": "^1.49.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

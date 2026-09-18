@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ORBITAL SENTINEL — Mission Console</title>
+<meta name="description" content="Mission control console for ORBITAL SENTINEL-1, a 6U hyperspectral CubeSat monitoring UAE coastal waters for algal blooms and scheduling desalination intake.">
+<meta name="theme-color" content="#00060a">
+<meta property="og:title" content="ORBITAL SENTINEL — Mission Console">
+<meta property="og:description" content="Ocean-colour monitoring for UAE desalination. Live telemetry, 3D orbit, hyperspectral retrieval, intake scheduling.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%2300060a'/><circle cx='16' cy='16' r='9' fill='none' stroke='%2300f3ff' stroke-width='2'/><circle cx='16' cy='7' r='2.6' fill='%23ffaa00'/></svg>">
+<link rel="stylesheet" href="styles/console.css">
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.js" } }
+</script>
+</head>
+<body>
+
+<!-- Boot sequence: also the honest place to say the whole thing runs client-side. -->
+<div id="boot">
+  <div class="inner">
+    <div class="title">ORBITAL SENTINEL</div>
+    <div class="lines" id="boot-lines"></div>
+  </div>
+</div>
+
+<div id="fatal">
+  <div class="box">
+    <h2>CONSOLE FAULT</h2>
+    <p id="fatal-msg"></p>
+    <p style="color:var(--text-dim)">This console needs WebGL and ES modules. It runs
+      entirely in the browser — there is no server to be down.</p>
+  </div>
+</div>
+
+<div id="console">
+
+  <!-- ===================== TOP BAR ===================== -->
+  <div id="topbar">
+    <div class="block" id="craft">
+      <span class="k">Spacecraft</span>
+      <span class="v" id="v-craft">ORBITAL SENTINEL-1</span>
+    </div>
+    <div class="sep"></div>
+    <div class="block" id="mode-label">
+      <span class="k">Operational mode</span>
+      <span class="v" id="v-mode">—</span>
+    </div>
+    <div class="sep"></div>
+    <div id="banner">STANDBY</div>
+    <div class="sep"></div>
+    <div class="block">
+      <span class="k">Mission time (UTC)</span>
+      <span class="v" id="v-met">--:--:--</span>
+    </div>
+    <div class="sep"></div>
+    <div class="block">
+      <span class="k">Orbit / compression</span>
+      <span class="v" id="v-orbit">—</span>
+    </div>
+    <div class="sep"></div>
+    <div id="alerts"></div>
+  </div>
+
+  <!-- ===================== STAGE ===================== -->
+  <div id="stage">
+
+    <!-- ---------- LEFT ---------- -->
+    <div id="col-left">
+
+      <section class="panel" id="uae-panel" data-accent="amber">
+        <header>
+          <span>UAE Swath</span>
+          <span class="spacer"></span>
+          <span class="tag" id="uae-tag">—</span>
+          <button class="why" data-why="why-uae" aria-expanded="false">?</button>
+        </header>
+        <div class="why-text" id="why-uae">
+          The <b>scan line</b> is where the pushbroom imager is looking right now;
+          the shaded band is everything it has already captured this pass. The
+          instrument sees a <b>180 km</b> swath at <b>30 m</b> ground resolution,
+          so one crossing covers the entire UAE coast in a single strip.
+        </div>
+        <div class="body">
+          <svg id="uae-svg" viewBox="0 0 200 150" role="img"
+               aria-label="Map of UAE coastal waters showing the satellite scanning swath">
+            <rect class="sea" x="0" y="0" width="200" height="150"></rect>
+            <g id="uae-grid"></g>
+            <!-- Chl-a field first: land is drawn over it, so the overlay reads
+                 as water only without needing an ocean mask. -->
+            <g id="uae-bloom"></g>
+            <g id="uae-land"></g>
+            <path id="uae-shape" class="uae"></path>
+            <path id="uae-track" class="track"></path>
+            <polygon id="uae-swath" class="swath-band"></polygon>
+            <line id="uae-scanline" class="swath-line" x1="0" y1="0" x2="0" y2="0"></line>
+            <g id="uae-plants"></g>
+            <circle id="uae-sat" class="sat" r="1.8" cx="-10" cy="-10"></circle>
+            <g id="uae-labels"></g>
+          </svg>
+        </div>
+      </section>
+
+      <section class="panel" id="power-panel">
+        <header>
+          <span>Electrical Power</span>
+          <span class="spacer"></span>
+          <span class="tag" id="power-flow-tag">—</span>
+          <button class="why" data-why="why-power" aria-expanded="false">?</button>
+        </header>
+        <div class="why-text" id="why-power">
+          <b>0.10 m²</b> of triple-junction cells make ~41 W in full sun. The bus
+          draws 6.2 W always; the imager 22 W; the X-band radio 9 W. Over a
+          35-minute eclipse that is only a <b>5 % depth of discharge</b> — which is
+          what a real orbit looks like. The gauge is therefore <b>zoomed to the
+          mission's actual range</b>, and the true percentage is printed beside it.
+        </div>
+        <div class="body">
+          <svg id="power-flow" viewBox="0 0 280 58" aria-hidden="true"></svg>
+          <div class="gauge">
+            <div class="gauge-top"><span>BATTERY SOC</span><b id="g-soc">—</b></div>
+            <div class="gauge-track"><div class="gauge-fill" id="g-soc-fill"></div></div>
+            <div class="gauge-scale"><span id="g-soc-min">—</span><span id="g-soc-max">—</span></div>
+            <div class="gauge-note" id="g-soc-note">zoomed scale · flight-rule floor 30 %</div>
+          </div>
+          <div class="gauge">
+            <div class="gauge-top"><span>ARRAY GENERATION</span><b id="g-gen">—</b></div>
+            <div class="gauge-track"><div class="gauge-fill amber" id="g-gen-fill"></div></div>
+            <div class="gauge-scale"><span>0 W</span><span>40.6 W peak</span></div>
+          </div>
+          <div class="gauge">
+            <div class="gauge-top"><span>TOTAL LOAD</span><b id="g-load">—</b></div>
+            <div class="gauge-track"><div class="gauge-fill" id="g-load-fill"></div></div>
+            <div class="gauge-scale"><span>0 W</span><span>40 W</span></div>
+          </div>
+          <dl class="kv" id="power-kv"></dl>
+        </div>
+      </section>
+
+      <section class="panel" id="sc-panel">
+        <header>
+          <span>Spacecraft</span>
+          <span class="spacer"></span>
+          <button class="why" data-why="why-sc" aria-expanded="false">?</button>
+        </header>
+        <div class="why-text" id="why-sc">
+          Attitude, thermal and recorder state. The detector is held near
+          <b>−40 °C</b>: a warm sensor adds noise that would swamp the
+          fluorescence line the science depends on, so the thermo-electric cooler
+          works hardest right before a pass.
+        </div>
+        <div class="body"><dl class="kv" id="sc-kv"></dl></div>
+      </section>
+    </div>
+
+    <!-- ---------- CENTRE ---------- -->
+    <div style="display:flex; flex-direction:column; gap:var(--gap); min-height:0;">
+      <section class="panel" id="globe-panel">
+        <header>
+          <span>Orbit — 3D</span>
+          <span class="spacer"></span>
+          <span class="tag" id="globe-tag">SSO 520 km · i 97.49°</span>
+          <button class="why" data-why="why-globe" aria-expanded="false">?</button>
+        </header>
+        <div class="why-text" id="why-globe">
+          Drag to rotate, scroll to zoom, <b>click any point to sample its
+          spectrum</b>. The amber box is the area of interest; the cyan line is the
+          ground track; the bright leading segment is the next 45 seconds of
+          flight. In <b>ACTIVE</b> the chlorophyll field is draped over the AOI —
+          amber and red are bloom.
+        </div>
+        <div class="body">
+          <div id="globe"></div>
+          <div id="globe-tools">
+            <button class="gbtn" id="btn-follow">FOLLOW SAT</button>
+            <button class="gbtn" id="btn-aoi">FOCUS UAE</button>
+            <button class="gbtn" id="btn-reset">RESET VIEW</button>
+          </div>
+          <div id="globe-hud">
+            SUBPOINT <b id="hud-sub">—</b> · RANGE TO AOI <b id="hud-range">—</b>
+            · GND SPEED <b id="hud-speed">—</b>
+          </div>
+          <div id="pick-readout"></div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ---------- RIGHT ---------- -->
+    <div id="col-right">
+
+      <section class="panel" id="spectro-panel">
+        <header>
+          <span>Spectroscopy — HYPER-A</span>
+          <span class="spacer"></span>
+          <span class="tag" id="spectro-tag">96 bands · 400–900 nm</span>
+          <button class="why" data-why="why-spectro" aria-expanded="false">?</button>
+        </header>
+        <div class="why-text" id="why-spectro">
+          Each bar is one spectral band of reflected light. Algae leave a
+          signature: chlorophyll-a <b>absorbs</b> blue (443 nm) and red (665 nm),
+          <b>reflects</b> green (555 nm), and — the decisive one — <b>re-emits</b>
+          light at 681 nm. That fluorescence peak only appears over
+          <b>living</b> algae, which is why this is worth measuring from orbit
+          rather than inferring from water colour.
+        </div>
+        <div class="body">
+          <div id="spectro-wrap"><canvas id="spectro"></canvas></div>
+          <div id="spectro-legend"></div>
+          <div id="spectro-idx"></div>
+        </div>
+      </section>
+
+      <section class="panel" id="desal-panel" data-accent="amber">
+        <header>
+          <span>Desalination Intake Schedule</span>
+          <span class="spacer"></span>
+          <span class="tag" id="desal-tag">—</span>
+          <button class="why" data-why="why-desal" aria-expanded="false">?</button>
+        </header>
+        <div class="why-text" id="why-desal">
+          Algal blooms clog reverse-osmosis intakes — the 2008–09 bloom in the
+          Gulf of Oman repeatedly shut Fujairah down. Operators find out when
+          intake pressure drops. This converts the orbital measurement into the
+          only thing they can act on: <b>when to draw water</b>. Hover a bar to see
+          exactly which terms drove that hour's score.
+        </div>
+        <div class="body" id="desal-body"></div>
+      </section>
+
+      <section class="panel scroll" id="downlink-panel" data-accent="red">
+        <header>
+          <span class="live-dot off" id="dl-dot"></span>
+          <span>Live Downlink</span>
+          <span class="spacer"></span>
+          <span class="tag" id="dl-tag">—</span>
+          <button class="why" data-why="why-dl" aria-expanded="false">?</button>
+        </header>
+        <div class="why-text" id="why-dl">
+          Raw telemetry as the ground station receives it, tagged with CCSDS
+          application IDs. <b>Every number here is the same number shown on the
+          gauges</b> — nothing in this log is filler. The line rate rises with
+          activity: one per tick in eclipse, four during a pass.
+        </div>
+        <div class="body"><div id="log" role="log" aria-live="off"></div></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ===================== TIMELINE ===================== -->
+  <div id="timeline">
+    <div id="tl-head">
+      <span>Operational Timeline</span>
+      <button class="mode-btn" data-mode="ECLIPSE">ECLIPSE</button>
+      <button class="mode-btn" data-mode="SUN_FACING">SUN FACING</button>
+      <button class="mode-btn" data-mode="ACTIVE">ACTIVE</button>
+      <button class="mode-btn" id="btn-play">❚❚ PAUSE</button>
+      <span class="spacer"></span>
+      <button class="mode-btn" id="btn-tour">▶ GUIDED TOUR</button>
+    </div>
+    <div id="tl-track">
+      <canvas id="tl-canvas"></canvas>
+      <input id="tl-slider" type="range" min="0" max="1" step="0.0005" value="0"
+             aria-label="Operational timeline position">
+    </div>
+    <div id="tl-foot">
+      <span>SLIDER <b id="tl-pos">0.000</b></span>
+      <span>SEGMENT <b id="tl-seg">—</b></span>
+      <span>ORBIT T+<b id="tl-orbit">—</b></span>
+      <span>CLOCK <b id="tl-rate">—</b></span>
+      <span style="color:var(--text-dim)">Drag the slider — every panel is a function of this one number.</span>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== GUIDED TOUR ===================== -->
+<div id="tour-mask">
+  <div id="tour-ring"></div>
+  <div id="tour-card">
+    <h3 id="tour-title"></h3>
+    <p id="tour-body"></p>
+    <div class="nav">
+      <span class="step" id="tour-step"></span>
+      <span class="spacer"></span>
+      <button class="tbtn ghost" id="tour-skip">SKIP</button>
+      <button class="tbtn ghost" id="tour-prev">BACK</button>
+      <button class="tbtn" id="tour-next">NEXT</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="app.js"></script>
+<noscript>
+  <div style="padding:24px;color:#9fdde6;font-family:monospace">
+    This mission console is an interactive simulation and needs JavaScript.
+  </div>
+</noscript>
+</body>
+</html>
